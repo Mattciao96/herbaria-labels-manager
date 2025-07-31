@@ -1,0 +1,1 @@
+TRANSCRIPTIONS_PATH <- "data/"
