@@ -6,10 +6,7 @@ data_dir <- "data"
 results_dir <- "results"
 
 # UTILS FUNCTIONS
-get_duplicates <- function(names) {
-  duplicates <- names[duplicated(names) | duplicated(names, fromLast = TRUE)]
-  return(duplicates)
-}
+
 
 # CHECK FILES
 
@@ -57,15 +54,7 @@ for (i in 1: length(connection_files)) {
 }
 
 
-write.csv(processed_data_index, paste0(results_dir, 'processed.csv'), row.names = FALSE)
+write.csv(processed_data_index, paste0(results_dir, '/', 'processed.csv'), row.names = FALSE)
 
-print(get_duplicates(connection_files))
-
-sheet_files <- list.files(paste0(data_dir, '/Sheets'), full.names = FALSE)
-print(get_duplicates(sheet_files))
-
-
-cover_files <- list.files(paste0(data_dir, '/Cover'), full.names = FALSE)
-print(get_duplicates(cover_files))
 
 
