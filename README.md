@@ -1,6 +1,6 @@
 ## procedure
 ### 1
-add a data folder with the files
+add a data folder with the files divided in Connection / Cover / Sheets
 
 ### 2
-run add_data_to_process.R to add the data to the process and find missing files
+run add_data_to_process.R to index files to process and find missing files
