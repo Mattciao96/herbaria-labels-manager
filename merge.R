@@ -12,7 +12,7 @@ batch <- '0001'
 batch_name <- 'BATCH'
 sheet_name <- 'SHEET_SHEET'
 cover_name <- 'COVER_COVER'
-LABEL_PATH <- 'data/'
+LABEL_PATH <- 'test/'
 
 regex_code_id <- 'FI-HCI-[0-9]+' # regex to extract herbarium id from notes or image path
 regex_cover_id <- 'Folder-FI-HCI-[0-9]+'

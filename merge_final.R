@@ -1,103 +1,138 @@
-# load files in env
+# LIBS
 library(dplyr)
 library(stringr)
 library(tidyr)
 
-
-year <- '2024'
-month <- '01'
-day <- '01'
-cp <- 'CP1'
-batch <- '0001'
-batch_name <- 'BATCH'
-sheet_name <- 'SHEET_SHEET'
-cover_name <- 'COVER_COVER'
-LABEL_PATH <- 'data/'
-
-regex_code_id <- 'FI-HCI-[0-9]+' # regex to extract herbarium id from notes or image path
+# VARIABLES
+regex_code_id <- 'FI-HCI-[0-9]+'
 regex_cover_id <- 'Folder-FI-HCI-[0-9]+'
-batch_file <- paste0(LABEL_PATH, cp, '_', year, month, day, '_', batch_name, '_', batch, '.csv')
-sheet_file <- paste0(LABEL_PATH, cp, '_', year, month, day, '_', sheet_name, '_', batch, '.csv')
-cover_file <- paste0(LABEL_PATH, cp, '_', year, month, day, '_', cover_name, '_', batch, '.csv')
+regex_old_id <- 'FI[0-9]+'
 
-batch_data <- read.csv(batch_file, sep = ';')
+batch_colnames <-
+  c(
+    'TYPE',
+    'CUBBY.NUMBER',
+    'COVER.BARCODE',
+    'SHEET.TYPE',
+    'COLOR',
+    'SHEET.BARCODE',
+    'CONNECTIONS',
+    'DATE.CREATED',
+    'PATH.JPG',
+    'BOH'
+  )
+
+
+# iniziamo con il primo file hardcoded
+batch_file <- 'data/Connection/CP1_20240603_BATCH_0001.csv'
+cover_file <- 'data/Cover/COVER_COVER_CP1_20240603_BATCH_0001.csv'
+sheet_file <- 'data/Sheets/SHEET_SHEET_CP1_20240603_BATCH_0001.csv'
+
+batch_data <- read.csv(batch_file, sep = ';' , header = FALSE)
+names(batch_data) <- batch_colnames
 sheet_data <- read.csv(sheet_file)
 cover_data <- read.csv(cover_file)
 
 
-# 1: extract herbarium id and cover id from image path and notes
-sheet_data <- sheet_data %>% 
-  mutate(herbarium_id = 
-           ifelse(!is.na(str_extract(Notes, regex_code_id)),
-                  str_extract(Notes, regex_code_id),
-                  str_extract(Path.JPG, regex_code_id)
-                  )
-         )
+################################################################################
+# PROCESSING
+################################################################################
 
-cover_data <- cover_data %>% 
-  mutate (
-    cover_id = str_extract(Path.JPG, regex_cover_id)
-  )
 
-# 1.1 add the dataset name to the columns
-batch_data <- batch_data %>%
-  rename_with(.fn = ~ paste0("batch.", .x))
+# 1: extract herbarium id from image path and notes
+# find duplicates in herbarium id
+sheet_data <- sheet_data %>%
+  mutate(HERBARIUM.ID =
+           ifelse(
+             !is.na(str_extract(NOTES, regex_code_id)),
+             str_extract(NOTES, regex_code_id),
+             str_extract(PATH.JPG, regex_code_id)
+           ))
 
 sheet_data <- sheet_data %>%
-  rename_with(.fn = ~ paste0("sheet.", .x))
-
-cover_data <- cover_data %>%
-  rename_with(.fn = ~ paste0("cover.", .x))
-
-# 1.2 CHECK ultra important there are duplicate IDs in sheet_data
-duplicates <- sheet_data %>% 
-  group_by(sheet.herbarium_id) %>% 
-  filter(n() > 1) %>%
+  group_by(HERBARIUM.ID) %>%
+  mutate(ID.DUPLICATE = n() > 1) %>%
   ungroup()
 
-# 2: create a new row for each sheet in batch
+# 1.1: extract cover id from image path and notes
+# find duplicates in cover id (i don't think it is a problem here)
+cover_data <- cover_data %>%
+  mutate (COVER.ID = str_extract(PATH.JPG, regex_cover_id))
+
+cover_data <- cover_data %>% 
+  group_by(COVER.ID) %>% 
+  mutate(ID.DUPLICATE = n() > 1) %>% 
+  ungroup()
+
+# cover_data %>% filter(ID.DUPLICATE == TRUE) # to check for duplicates
+
+# 1.2 add the dataset type (BATCH, SHEET, COVER) to the columns do avoid duplicate names 
+batch_data <- batch_data %>%
+  rename_with(.fn = function(column_name) {
+    paste0("BATCH.", column_name)
+  })
+
+sheet_data <- sheet_data %>%
+  rename_with(.fn = function(column_name) {
+    paste0("SHEET.", column_name)
+  })
+
+cover_data <- cover_data %>%
+  rename_with(.fn = function(column_name) {
+    paste0("COVER.", column_name)
+  })
+
+# 1.3 for batch data, extract the old id in a column OLD.ID
+batch_data <- batch_data %>%
+  mutate(BATCH.OLD.ID = str_extract(BATCH.CONNECTIONS, regex_old_id))
+
+
+
+
+# 2: create a new row for each sheet in batch written in CONNECTIONS with the SHEET.BARCODE taken from CONNECTIONS
 # iterate each row in cp_data with Type == 'Sheet'
-# check if Garbage is not empty
+# check if CONNECTIONS is not empty
 # extract all different herbarium id using pattern FI-HCI-[0-9]+
 # for each one copy the row and change the herbarium id in Sheet.Barcode
+# but i need to consider even the old id type (FI[0-9]+)
+
+test_rem <- sheet_data %>% filter(SHEET.ID.DUPLICATE == TRUE)
 
 new_rows_to_add <- batch_data %>%
-  filter(
-    batch.Type == 'Sheet',
-    !is.na(batch.Garbage),
-    nzchar(batch.Garbage)
-  ) %>%
-  # Extract all IDs
-  mutate(extracted_ids = str_extract_all(batch.Garbage, regex_code_id)) %>%
-  # Keep only rows where IDs were found
-  filter(lengths(extracted_ids) > 0) %>%
+  filter(BATCH.TYPE == 'Sheet',
+         !is.na(BATCH.CONNECTIONS),
+         BATCH.CONNECTIONS != '') %>%
+  mutate(EXTRACTED.ID = str_extract_all(BATCH.CONNECTIONS, regex_code_id)) %>% # there can be multiple numbers
+  filter(lengths(EXTRACTED.ID) > 0) %>%
   # Get unique IDs per row
-  mutate(unique_ids = lapply(extracted_ids, unique)) %>%
+  mutate(UNIQUE.ID = lapply(EXTRACTED.ID, unique)) %>%
   # Expand rows based on unique IDs
-  unnest(cols = c(unique_ids)) %>%
+  unnest(cols = c(UNIQUE.ID)) %>%
   # *** CRITICAL STEP: Update Barcode for these NEW rows ***
-  mutate(batch.Sheet.Barcode = unique_ids) %>%
+  mutate(BATCH.SHEET.BARCODE = UNIQUE.ID) %>%
   # Clean up temporary columns
-  select(-extracted_ids, -unique_ids)
+  select(-EXTRACTED.ID, -UNIQUE.ID)
 
 processed_batch_data <- bind_rows(batch_data, new_rows_to_add)
 
 # 2.1 remove remove (not transcribe red) and all others with Type != 'Sheet'
-processed_batch_data <- processed_batch_data %>% 
+processed_batch_data <- processed_batch_data %>%
   filter(batch.Type == 'Sheet')
 
 # 2: merge sheet and cp
-sheet_batch_data <-  sheet_data %>% 
-  left_join(processed_batch_data, by = c('sheet.herbarium_id' = 'batch.Sheet.Barcode'))
+sheet_batch_data <-  sheet_data %>%
+  left_join(processed_batch_data,
+            by = c('sheet.herbarium_id' = 'batch.Sheet.Barcode'))
 
-missing_batch <- sheet_batch_data %>% 
+missing_batch <- sheet_batch_data %>%
   filter(is.na(batch.Type))
 
 # 2.1: merge sheet_cp and cover
-sheet_batch_cover_data <- sheet_batch_data %>% 
+sheet_batch_cover_data <- sheet_batch_data %>%
   left_join(cover_data, by = c('batch.Cover.Barcode' = 'cover.cover_id'))
 
-# NOTE: i lost the batch data for the cover but i think it is not useful at all 
+# !!!NOTE: i lost the batch data for the cover but i think it is not useful at all
+# i can create its own file merging cover and batch data if needed (not now)
 
 # 3: manage multisheet
 
@@ -107,11 +142,11 @@ sheet_batch_cover_data <- sheet_batch_data %>%
 # the first row with multisheet will have is_multisheet_first = TRUE
 # in anoter table write the relation with sheet.herbarium_id of the various record (one to many)
 # if batch.Cover.Barcode changes or barch.Color changes the chain of correlation of current multisheets is broken so go on
-multisheet_data <- sheet_batch_cover_data %>% 
-  filter(batch.Sheet.Type == 'Multisheet') %>% 
+multisheet_data <- sheet_batch_cover_data %>%
+  filter(batch.Sheet.Type == 'Multisheet') %>%
   arrange(batch.Cover.Barcode, batch.Date.Created)
 
-# now i want to create a new table that contains the many to many relation 
+# now i want to create a new table that contains the many to many relation
 # first i want to create a new column that contains data
 
 
@@ -128,7 +163,8 @@ sheet_batch_cover_data_processed <- sheet_batch_cover_data %>%
   # Within each group, find the index (row number relative to group start)
   # and the ID of the *first* 'Multisheet'
   mutate(
-    first_multisheet_index_in_group = which(batch.Sheet.Type == 'Multisheet')[1], # Get index of first TRUE
+    first_multisheet_index_in_group = which(batch.Sheet.Type == 'Multisheet')[1],
+    # Get index of first TRUE
     # Get the herbarium ID corresponding to that index within the group
     # Use NA if no 'Multisheet' is found in the group
     multisheet_first_id_in_group = if_else(
@@ -151,7 +187,9 @@ sheet_batch_cover_data_processed <- sheet_batch_cover_data %>%
 
 # Display the result with the new column
 print("Processed Data with 'is_multisheet_first':")
-print(sheet_batch_cover_data_processed %>% select(-group_run_id, -first_multisheet_index_in_group)) # Hide intermediate columns for clarity
+print(
+  sheet_batch_cover_data_processed %>% select(-group_run_id, -first_multisheet_index_in_group)
+) # Hide intermediate columns for clarity
 
 # --- 3. Create the Relationship Table ---
 
@@ -159,10 +197,8 @@ multisheet_relations <- sheet_batch_cover_data_processed %>%
   # Keep only rows that belong to a group where a multisheet was found
   filter(!is.na(multisheet_first_id_in_group)) %>%
   # Select the ID of the first multisheet in the group and the ID of the current row
-  select(
-    multisheet_first_herbarium_id = multisheet_first_id_in_group,
-    related_herbarium_id = sheet.herbarium_id
-  ) %>%
+  select(multisheet_first_herbarium_id = multisheet_first_id_in_group,
+         related_herbarium_id = sheet.herbarium_id) %>%
   # Optional: remove self-references if needed (where first ID = related ID)
   # filter(multisheet_first_herbarium_id != related_herbarium_id) %>%
   # Ensure distinct relationships if duplicates somehow occurred (unlikely with this method)
@@ -173,15 +209,16 @@ multisheet_relations <- sheet_batch_cover_data_processed %>%
 # --- 4. Final Original Table (Optional Cleanup) ---
 # You might want the original table just with the is_multisheet_first column
 
-sheet_batch_cover_data_processed <- sheet_batch_cover_data_processed %>%
-  select(-group_run_id, -first_multisheet_index_in_group, -multisheet_first_id_in_group)
+sheet_batch_cover_data_processed <-
+  sheet_batch_cover_data_processed %>%
+  select(-group_run_id,
+         -first_multisheet_index_in_group,
+         -multisheet_first_id_in_group)
 
 
-multisheet_relations <- multisheet_relations %>% 
-  rename(
-    herbarium_id_with_label = multisheet_first_herbarium_id,
-    related_herbarium_id = related_herbarium_id
-  )
+multisheet_relations <- multisheet_relations %>%
+  rename(herbarium_id_with_label = multisheet_first_herbarium_id,
+         related_herbarium_id = related_herbarium_id)
 
 
 
