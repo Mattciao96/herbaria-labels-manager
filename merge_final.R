@@ -42,6 +42,7 @@ cover_data <- read.csv(cover_file)
 # 1: extract herbarium id from image path and notes
 # find duplicates in herbarium id
 sheet_data <- sheet_data %>%
+  mutate(ORIGINAL.HERBARIUM.ID = str_extract(PATH.JPG, regex_code_id)) %>% 
   mutate(HERBARIUM.ID =
            ifelse(
              !is.na(str_extract(NOTES, regex_code_id)),
@@ -83,11 +84,16 @@ cover_data <- cover_data %>%
   })
 
 # 1.3 for batch data, extract the old id in a column OLD.ID
+# and the  original barcode
 batch_data <- batch_data %>%
+  mutate(BATCH.SHEET.ORIGINAL.BARCODE = BATCH.SHEET.BARCODE) %>%
   mutate(BATCH.OLD.ID = str_extract(BATCH.CONNECTIONS, regex_old_id))
 
 
 
+################################################################################
+# 2 merge all data
+################################################################################
 
 # 2: create a new row for each sheet in batch written in CONNECTIONS with the SHEET.BARCODE taken from CONNECTIONS
 # iterate each row in cp_data with Type == 'Sheet'
@@ -96,7 +102,7 @@ batch_data <- batch_data %>%
 # for each one copy the row and change the herbarium id in Sheet.Barcode
 # but i need to consider even the old id type (FI[0-9]+)
 
-test_rem <- sheet_data %>% filter(SHEET.ID.DUPLICATE == TRUE)
+#test_rem <- sheet_data %>% filter(SHEET.ID.DUPLICATE == TRUE)
 
 new_rows_to_add <- batch_data %>%
   filter(BATCH.TYPE == 'Sheet',
@@ -104,38 +110,77 @@ new_rows_to_add <- batch_data %>%
          BATCH.CONNECTIONS != '') %>%
   mutate(EXTRACTED.ID = str_extract_all(BATCH.CONNECTIONS, regex_code_id)) %>% # there can be multiple numbers
   filter(lengths(EXTRACTED.ID) > 0) %>%
-  # Get unique IDs per row
   mutate(UNIQUE.ID = lapply(EXTRACTED.ID, unique)) %>%
-  # Expand rows based on unique IDs
-  unnest(cols = c(UNIQUE.ID)) %>%
-  # *** CRITICAL STEP: Update Barcode for these NEW rows ***
+
+  unnest(cols = c(UNIQUE.ID)) %>%   # expand rows based on unique IDs !bellissimo
   mutate(BATCH.SHEET.BARCODE = UNIQUE.ID) %>%
-  # Clean up temporary columns
   select(-EXTRACTED.ID, -UNIQUE.ID)
 
-processed_batch_data <- bind_rows(batch_data, new_rows_to_add)
 
-# 2.1 remove remove (not transcribe red) and all others with Type != 'Sheet'
-processed_batch_data <- processed_batch_data %>%
-  filter(batch.Type == 'Sheet')
+batch_data <- bind_rows(batch_data, new_rows_to_add)
 
-# 2: merge sheet and cp
-sheet_batch_data <-  sheet_data %>%
-  left_join(processed_batch_data,
-            by = c('sheet.herbarium_id' = 'batch.Sheet.Barcode'))
+# 2.1 remove  all others with Type != 'Sheet'
+batch_data <- batch_data %>%
+  filter(BATCH.TYPE == 'Sheet')
 
-missing_batch <- sheet_batch_data %>%
-  filter(is.na(batch.Type))
+# 2.2: merge sheet and batch
+# errors
 
-# 2.1: merge sheet_cp and cover
-sheet_batch_cover_data <- sheet_batch_data %>%
-  left_join(cover_data, by = c('batch.Cover.Barcode' = 'cover.cover_id'))
+not_in_batch_errors <-  sheet_data %>%
+  left_join(batch_data,
+            by = c('SHEET.HERBARIUM.ID' = 'BATCH.SHEET.BARCODE')) %>%
+  filter(is.na(BATCH.TYPE))
 
-# !!!NOTE: i lost the batch data for the cover but i think it is not useful at all
-# i can create its own file merging cover and batch data if needed (not now)
+# even the opposite
+not_in_sheet_errors <-  batch_data %>%
+  left_join(sheet_data,
+            by = c('BATCH.SHEET.BARCODE' = 'SHEET.HERBARIUM.ID')) %>%
+  filter(is.na(SHEET.APPLICATION.ID))
 
+# correct sheet and batch
+#sheet_batch_data <-  sheet_data %>%
+#  left_join(batch_data,
+#  by = c('SHEET.ORIGINAL.HERBARIUM.ID' = 'BATCH.SHEET.BARCODE'))
+#
+batch_sheet_data <-  batch_data %>%
+  left_join(sheet_data,
+            by = c('BATCH.SHEET.BARCODE' = 'SHEET.HERBARIUM.ID'))
+
+# check duplicates
+batch_sheet_data %>% group_by(BATCH.SHEET.BARCODE, SHEET.ID.DUPLICATE) %>%
+  summarise(n = n()) %>%
+  filter(n > 1)
+
+# change name for duplicates, the first keep it as it is, from the second duplicate  -> from  BATCH.SHEET.BARCODE to BATCH.SHEET.BARCODE + -DUP-<number>
+# super
+batch_sheet_data <- batch_sheet_data %>%
+  group_by(BATCH.SHEET.BARCODE) %>%
+  mutate(
+    FINAL.ID = if_else(
+      row_number() > 1,
+      paste0(BATCH.SHEET.BARCODE, "-DUP-", row_number() - 1),
+      BATCH.SHEET.BARCODE
+    )
+  ) %>%
+  ungroup()
+
+batch_sheet_data %>% group_by(FINAL.ID) %>%
+  summarise(n = n()) %>%
+  filter(n > 1)
+
+
+# 2.3: merge sheet_cp and cover
+sheet_batch_cover_data <- batch_sheet_data %>%
+  left_join(cover_data, by = c('BATCH.COVER.BARCODE' = 'COVER.COVER.ID'))
+
+
+# ! NOTE: STEP 2 WAS A NIGTHMARE DUE TO MANY UNEXPECTED DATA
+
+################################################################################
 # 3: manage multisheet
+################################################################################
 
+sheet_batch_cover_data %>% arrange(BATCH.)
 # i already ordered the table correctly
 # create a column is_multisheet_first
 # iterate through the sheet_batch_cover_data and check if there are 'Multisheet' in batch.Sheet.Type
