@@ -1,3 +1,6 @@
+# ricordati di mettere anche i missing in sheet dopo multisheet
+
+
 # LIBS
 library(dplyr)
 library(stringr)
@@ -54,6 +57,7 @@ sheet_data <- sheet_data %>%
   group_by(HERBARIUM.ID) %>%
   mutate(ID.DUPLICATE = n() > 1) %>%
   ungroup()
+
 
 # 1.1: extract cover id from image path and notes
 # find duplicates in cover id (i don't think it is a problem here)
@@ -174,6 +178,35 @@ batch_sheet_data %>% group_by(FINAL.ID) %>%
 # 2.3: merge sheet_cp and cover
 sheet_batch_cover_data <- batch_sheet_data %>%
   left_join(cover_data, by = c('BATCH.COVER.BARCODE' = 'COVER.COVER.ID'))
+
+
+# 2.4 save the duplicates_in_sheet.csv
+duplicates_file <- read.csv('results/duplicates_in_sheet.csv', ) %>%
+  mutate(across(everything(), as.character))
+dups <- sheet_data %>%
+  filter(SHEET.ID.DUPLICATE == TRUE) %>%
+  select(SHEET.HERBARIUM.ID, SHEET.ORIGINAL.HERBARIUM.ID) %>% 
+  distinct() %>% 
+  mutate(FILE = batch_file) %>% 
+  select(FILE, SHEET.HERBARIUM.ID, SHEET.ORIGINAL.HERBARIUM.ID) # to reorder
+
+# if dups has rows, append them to the duplicates_file if they are not already present
+if (nrow(dups) > 0) {
+  new_dups_to_add <- anti_join(dups, duplicates_file, by = c("FILE", "SHEET.HERBARIUM.ID", "SHEET.ORIGINAL.HERBARIUM.ID"))
+  if (nrow(new_dups_to_add) > 0) {
+    updated_duplicates_log <- bind_rows(duplicates_file, new_dups_to_add)
+    write.csv(updated_duplicates_log, batch_file, row.names = FALSE)
+    cat(nrow(new_dups_to_add), "new duplicate records were found and appended\n")
+  } else {
+    cat("duplicates were found, but they were already present in the log file. No new entries added.\n")
+  }
+} else {
+  cat("No duplicates found in ", batch_file , "\n")
+}
+
+rm(duplicates_file, dups)
+
+
 
 
 # ! NOTE: STEP 2 WAS A NIGTHMARE DUE TO MANY UNEXPECTED DATA
