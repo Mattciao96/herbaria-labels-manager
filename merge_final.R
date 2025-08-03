@@ -207,49 +207,43 @@ if (nrow(dups) > 0) {
 rm(duplicates_file, dups)
 
 
-
-
-# ! NOTE: STEP 2 WAS A NIGTHMARE DUE TO MANY UNEXPECTED DATA
+# ! NOTE: STEP 2 WAS A NIGTHMARE DUE TO MANY UNEXPECTED DATA (duplicates errors in id, missing data in sheet)
 
 ################################################################################
 # 3: manage multisheet
 ################################################################################
 
-sheet_batch_cover_data <- sheet_batch_cover_data %>% arrange(BATCH.DATE.CREATED)
-# i already ordered the table correctly
+# 3.1 already ordered the table correctly
 # create a column is_multisheet_first
 # iterate through the sheet_batch_cover_data and check if there are 'Multisheet' in batch.Sheet.Type
 # the first row with multisheet will have is_multisheet_first = TRUE
 # in anoter table write the relation with sheet.herbarium_id of the various record (one to many)
 # if batch.Cover.Barcode changes or barch.Color changes the chain of correlation of current multisheets is broken so go on
 multisheet_data <- sheet_batch_cover_data %>%
-  filter(batch.Sheet.Type == 'Multisheet') %>%
-  arrange(batch.Cover.Barcode, batch.Date.Created)
+  filter(BATCH.SHEET.TYPE == 'Multisheet') %>%
+  arrange(BATCH.COVER.BARCODE, BATCH.DATE.CREATED)
 
 # now i want to create a new table that contains the many to many relation
 # first i want to create a new column that contains data
 
-
-
-
-# --- 2. Process the Data ---
+# 3.2 process multisheet data 
 
 # Identify consecutive runs and find the first multisheet within each run
 sheet_batch_cover_data_processed <- sheet_batch_cover_data %>%
   # Create an ID for consecutive runs of Barcode and Color
-  mutate(group_run_id = consecutive_id(batch.Cover.Barcode, batch.Color)) %>%
+  mutate(group_run_id = consecutive_id(BATCH.COVER.BARCODE, BATCH.COLOR)) %>%
   # Group by these consecutive runs
   group_by(group_run_id) %>%
   # Within each group, find the index (row number relative to group start)
   # and the ID of the *first* 'Multisheet'
   mutate(
-    first_multisheet_index_in_group = which(batch.Sheet.Type == 'Multisheet')[1],
+    first_multisheet_index_in_group = which(BATCH.SHEET.TYPE == 'Multisheet')[1],
     # Get index of first TRUE
     # Get the herbarium ID corresponding to that index within the group
     # Use NA if no 'Multisheet' is found in the group
     multisheet_first_id_in_group = if_else(
       !is.na(first_multisheet_index_in_group),
-      sheet.herbarium_id[first_multisheet_index_in_group],
+      SHEET.HERBARIUM.ID[first_multisheet_index_in_group],
       NA_character_ # Use NA of the correct type (character)
     )
   ) %>%
