@@ -57,4 +57,9 @@ for (i in 1: length(connection_files)) {
 write.csv(processed_data_index, paste0(results_dir, '/', 'processed.csv'), row.names = FALSE)
 
 
+# 4: generate other files from templates
+missing_sheet_in_batch <- read.csv('missing_sheet_in_batch.template.csv')
+duplicates_in_sheet <- read.csv('duplicates_in_sheet.template.csv')
 
+write.csv(missing_sheet_in_batch, paste0(results_dir, '/', 'missing_sheet_in_batch.csv'), row.names = FALSE)
+write.csv(duplicates_in_sheet, paste0(results_dir, '/', 'duplicates_in_sheet.csv'), row.names = FALSE)

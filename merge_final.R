@@ -131,6 +131,8 @@ not_in_batch_errors <-  sheet_data %>%
             by = c('SHEET.HERBARIUM.ID' = 'BATCH.SHEET.BARCODE')) %>%
   filter(is.na(BATCH.TYPE))
 
+
+
 # even the opposite
 not_in_sheet_errors <-  batch_data %>%
   left_join(sheet_data,
@@ -180,7 +182,7 @@ sheet_batch_cover_data <- batch_sheet_data %>%
 # 3: manage multisheet
 ################################################################################
 
-sheet_batch_cover_data %>% arrange(BATCH.)
+sheet_batch_cover_data <- sheet_batch_cover_data %>% arrange(BATCH.DATE.CREATED)
 # i already ordered the table correctly
 # create a column is_multisheet_first
 # iterate through the sheet_batch_cover_data and check if there are 'Multisheet' in batch.Sheet.Type
