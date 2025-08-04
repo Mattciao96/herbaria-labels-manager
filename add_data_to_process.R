@@ -22,6 +22,7 @@ if (!dir.exists(paste0(data_dir, '/Sheets'))) stop("Sheets does not exist")
 
 # 3: process with missing files notes
 processed_data_index = read.csv('processed.template.csv')
+connection_files <- list.files(paste0(data_dir, '/Connection'), full.names = FALSE)
 connection_files <- connection_files %>% sort()
 
 for (i in 1: length(connection_files)) {
