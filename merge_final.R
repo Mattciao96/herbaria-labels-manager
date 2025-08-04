@@ -27,6 +27,7 @@ batch_colnames <-
 
 
 # iniziamo con il primo file hardcoded
+save_file <- 'processed_CP1_20240603_BATCH_0001.csv'
 batch_file <- 'data/Connection/CP1_20240603_BATCH_0001.csv'
 cover_file <- 'data/Cover/COVER_COVER_CP1_20240603_BATCH_0001.csv'
 sheet_file <- 'data/Sheets/SHEET_SHEET_CP1_20240603_BATCH_0001.csv'
@@ -179,6 +180,9 @@ batch_sheet_data %>% group_by(FINAL.ID) %>%
 sheet_batch_cover_data <- batch_sheet_data %>%
   left_join(cover_data, by = c('BATCH.COVER.BARCODE' = 'COVER.COVER.ID'))
 
+############################################################################
+# SAVE DUPS LOGS
+############################################################################
 
 # 2.4 save the duplicates_in_sheet.csv
 duplicates_file <- read.csv('results/duplicates_in_sheet.csv', ) %>%
@@ -189,6 +193,7 @@ dups <- sheet_data %>%
   distinct() %>% 
   mutate(FILE = batch_file) %>% 
   select(FILE, SHEET.HERBARIUM.ID, SHEET.ORIGINAL.HERBARIUM.ID) # to reorder
+
 
 # if dups has rows, append them to the duplicates_file if they are not already present
 if (nrow(dups) > 0) {
@@ -227,6 +232,7 @@ multisheet_data <- sheet_batch_cover_data %>%
 # first i want to create a new column that contains data
 
 # 3.2 process multisheet data 
+# funziona ma non so come
 
 # Identify consecutive runs and find the first multisheet within each run
 sheet_batch_cover_data_processed <- sheet_batch_cover_data %>%
@@ -243,7 +249,7 @@ sheet_batch_cover_data_processed <- sheet_batch_cover_data %>%
     # Use NA if no 'Multisheet' is found in the group
     multisheet_first_id_in_group = if_else(
       !is.na(first_multisheet_index_in_group),
-      SHEET.HERBARIUM.ID[first_multisheet_index_in_group],
+      FINAL.ID[first_multisheet_index_in_group],
       NA_character_ # Use NA of the correct type (character)
     )
   ) %>%
@@ -259,40 +265,144 @@ sheet_batch_cover_data_processed <- sheet_batch_cover_data %>%
   ) %>%
   ungroup() # Now we can safely ungroup
 
-# Display the result with the new column
-print("Processed Data with 'is_multisheet_first':")
-print(
-  sheet_batch_cover_data_processed %>% select(-group_run_id, -first_multisheet_index_in_group)
-) # Hide intermediate columns for clarity
+# 3.3 add data of the first multisheet if the selected is empty (molto probabile lo sia)
 
-# --- 3. Create the Relationship Table ---
+# Step 3.3: Copy SHEET columns from first multisheet to other rows in the same group
+sheet_batch_cover_data_final <- sheet_batch_cover_data_processed %>%
+  group_by(group_run_id) %>%
+  mutate(
+    # For each group, if there's a first multisheet, get its SHEET data
+    across(
+      starts_with("SHEET."),
+      ~ ifelse(
+        !is.na(multisheet_first_id_in_group) & !is_multisheet_first,
+        # Get the value from the first multisheet row in this group
+        .[which(FINAL.ID == multisheet_first_id_in_group)[1]],
+        # Otherwise keep the original value
+        .
+      ),
+      .names = "{.col}"
+    )
+  ) %>%
+  ungroup()
 
-multisheet_relations <- sheet_batch_cover_data_processed %>%
-  # Keep only rows that belong to a group where a multisheet was found
-  filter(!is.na(multisheet_first_id_in_group)) %>%
-  # Select the ID of the first multisheet in the group and the ID of the current row
-  select(multisheet_first_herbarium_id = multisheet_first_id_in_group,
-         related_herbarium_id = sheet.herbarium_id) %>%
-  # Optional: remove self-references if needed (where first ID = related ID)
-  # filter(multisheet_first_herbarium_id != related_herbarium_id) %>%
-  # Ensure distinct relationships if duplicates somehow occurred (unlikely with this method)
-  distinct()
+# Step 3.3: Add label_reference column
+sheet_batch_cover_data_with_labels <- sheet_batch_cover_data_processed %>%
+  group_by(group_run_id) %>%
+  mutate(
+    # Add label_reference column
+    label_reference = ifelse(
+      is_multisheet_first == FALSE & !is.na(multisheet_first_id_in_group),
+      # Get SHEET.PATH.JPG from the row where FINAL.ID == multisheet_first_id_in_group
+      SHEET.PATH.JPG[which(FINAL.ID == multisheet_first_id_in_group)[1]],
+      NA_character_
+    )
+  ) %>%
+  ungroup()
+
+# Step 3.4: Copy SHEET columns from first multisheet to other rows in the same group
+sheet_batch_cover_data_final <- sheet_batch_cover_data_with_labels %>%
+  group_by(group_run_id) %>%
+  mutate(
+    # For each group, if there's a first multisheet, get its SHEET data
+    across(
+      starts_with("SHEET."),
+      ~ ifelse(
+        !is.na(multisheet_first_id_in_group) & !is_multisheet_first,
+        # Get the value from the first multisheet row in this group
+        .[which(FINAL.ID == multisheet_first_id_in_group)[1]],
+        # Otherwise keep the original value
+        .
+      ),
+      .names = "{.col}"
+    )
+  ) %>%
+  ungroup()
+
+
+
+################################################################################
+# 4 add missing sheet data to the log
+################################################################################
+
+missing_sheets_file <- read.csv('results/missing_sheet_in_batch.csv', ) %>%
+  mutate(across(everything(), as.character))
+
+missing_sheets <- sheet_batch_cover_data_final %>% filter(is.na(SHEET.APPLICATION.ID)) %>% 
+  mutate(FILE = batch_file) %>% 
+  select(FILE,BATCH.SHEET.TYPE,BATCH.COLOR,BATCH.SHEET.BARCODE,BATCH.CONNECTIONS,BATCH.SHEET.ORIGINAL.BARCODE)
+
+# if dups has rows, append them to the duplicates_file if they are not already present
+if (nrow(missing_sheets) > 0) {
+  new_missing_sheets_to_add <- anti_join(missing_sheets, missing_sheets_file, by = c("FILE","BATCH.SHEET.TYPE","BATCH.COLOR","BATCH.SHEET.BARCODE","BATCH.CONNECTIONS","BATCH.SHEET.ORIGINAL.BARCODE"))
+  if (nrow(new_missing_sheets_to_add) > 0) {
+    updated_duplicates_log <- bind_rows(missing_sheets_file, new_missing_sheets_to_add)
+    write.csv(updated_duplicates_log, missing_sheets_file, row.names = FALSE)
+    cat(nrow(new_missing_sheets_to_add), "new duplicate records were found and appended\n")
+  } else {
+    cat("duplicates were found, but they were already present in the log file. No new entries added.\n")
+  }
+} else {
+  cat("No duplicates found in ", batch_file , "\n")
+}
+
+################################################################################
+# 5 save processed file in results folder
+################################################################################
+write.csv(sheet_batch_cover_data_final, 
+          file = paste0("results/", save_file), 
+          row.names = FALSE, 
+          na = "")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# GARBAGE
+
+
+
+
+# 3.4. Create the Relationship Table ---
+
+#multisheet_relations <- sheet_batch_cover_data_processed %>%
+#  # Keep only rows that belong to a group where a multisheet was found
+#  filter(!is.na(multisheet_first_id_in_group)) %>%
+#  # Select the ID of the first multisheet in the group and the ID of the current row
+#  select(multisheet_first_herbarium_id = multisheet_first_id_in_group,
+#         related_herbarium_id = FINAL.ID) %>%
+#  # Optional: remove self-references if needed (where first ID = related ID)
+#  # filter(multisheet_first_herbarium_id != related_herbarium_id) %>%
+#  # Ensure distinct relationships if duplicates somehow occurred (unlikely with this method)
+#  distinct()
 
 
 
 # --- 4. Final Original Table (Optional Cleanup) ---
 # You might want the original table just with the is_multisheet_first column
 
-sheet_batch_cover_data_processed <-
-  sheet_batch_cover_data_processed %>%
-  select(-group_run_id,
-         -first_multisheet_index_in_group,
-         -multisheet_first_id_in_group)
+
+# ma proprio no, hai rimosso roba utile
+#sheet_batch_cover_data_processed <-
+#  sheet_batch_cover_data_processed %>%
+#  select(-group_run_id,
+#         -first_multisheet_index_in_group,
+#         -multisheet_first_id_in_group)
 
 
-multisheet_relations <- multisheet_relations %>%
-  rename(herbarium_id_with_label = multisheet_first_herbarium_id,
-         related_herbarium_id = related_herbarium_id)
+#multisheet_relations <- multisheet_relations %>%
+#  rename(herbarium_id_with_label = multisheet_first_herbarium_id,
+#         related_herbarium_id = related_herbarium_id)
 
 
 
