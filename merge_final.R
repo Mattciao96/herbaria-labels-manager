@@ -200,7 +200,7 @@ if (nrow(dups) > 0) {
   new_dups_to_add <- anti_join(dups, duplicates_file, by = c("FILE", "SHEET.HERBARIUM.ID", "SHEET.ORIGINAL.HERBARIUM.ID"))
   if (nrow(new_dups_to_add) > 0) {
     updated_duplicates_log <- bind_rows(duplicates_file, new_dups_to_add)
-    write.csv(updated_duplicates_log, batch_file, row.names = FALSE)
+    write.csv(updated_duplicates_log, 'results/duplicates_in_sheet.csv', row.names = FALSE)
     cat(nrow(new_dups_to_add), "new duplicate records were found and appended\n")
   } else {
     cat("duplicates were found, but they were already present in the log file. No new entries added.\n")
@@ -209,7 +209,7 @@ if (nrow(dups) > 0) {
   cat("No duplicates found in ", batch_file , "\n")
 }
 
-rm(duplicates_file, dups)
+rm(duplicates_file, updated_duplicates_log, new_dups_to_add, dups)
 
 
 # ! NOTE: STEP 2 WAS A NIGTHMARE DUE TO MANY UNEXPECTED DATA (duplicates errors in id, missing data in sheet)
@@ -337,7 +337,7 @@ if (nrow(missing_sheets) > 0) {
   new_missing_sheets_to_add <- anti_join(missing_sheets, missing_sheets_file, by = c("FILE","BATCH.SHEET.TYPE","BATCH.COLOR","BATCH.SHEET.BARCODE","BATCH.CONNECTIONS","BATCH.SHEET.ORIGINAL.BARCODE"))
   if (nrow(new_missing_sheets_to_add) > 0) {
     updated_duplicates_log <- bind_rows(missing_sheets_file, new_missing_sheets_to_add)
-    write.csv(updated_duplicates_log, missing_sheets_file, row.names = FALSE)
+    write.csv(updated_duplicates_log, 'results/missing_sheet_in_batch.csv', row.names = FALSE)
     cat(nrow(new_missing_sheets_to_add), "new duplicate records were found and appended\n")
   } else {
     cat("duplicates were found, but they were already present in the log file. No new entries added.\n")
@@ -345,6 +345,8 @@ if (nrow(missing_sheets) > 0) {
 } else {
   cat("No duplicates found in ", batch_file , "\n")
 }
+
+rm(missing_sheets, missing_sheets_file, new_missing_sheets_to_add, updated_duplicates_log)
 
 ################################################################################
 # 5 save processed file in results folder
