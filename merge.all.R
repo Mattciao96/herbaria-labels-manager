@@ -250,7 +250,7 @@ process_batch <- function(batch_name) {
     mutate(
       SHEET.PATH.JPG = ifelse(
         !is.na(multisheet_first_id_in_group) & !is_multisheet_first,
-        str_replace(SHEET.PATH.JPG, as.character(FINAL.ID), as.character(multisheet_first_id_in_group)),
+        str_replace(SHEET.PATH.JPG, as.character(multisheet_first_id_in_group), as.character(FINAL.ID)),
         SHEET.PATH.JPG
       )
     ) %>%
