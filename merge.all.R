@@ -22,7 +22,7 @@ batch_colnames <- c(
   'PATH.JPG',
   'BOH'
 )
-
+batch_name = 'CP1_20240509_BATCH_0001.csv';
 # Function to process a single batch
 process_batch <- function(batch_name) {
   cat("Processing:", batch_name, "\n")
@@ -61,6 +61,11 @@ process_batch <- function(batch_name) {
     cat("ERROR reading files for", batch_name, ":", e$message, "\n")
     return(FALSE)
   })
+  
+  # replace all column names of the 3 files to uppercase
+  names(batch_data) <- toupper(names(batch_data))
+  names(sheet_data) <- toupper(names(sheet_data))
+  names(cover_data) <- toupper(names(cover_data))
   
   ############################################################################
   # PROCESSING
@@ -194,6 +199,8 @@ process_batch <- function(batch_name) {
   ############################################################################
   # 3: manage multisheet
   ############################################################################
+  # not considered problem, for multisheet, only the image with the label appears
+  # in the sheet , so, when duplicating, you have to insert the correct image
   
   # 3.2 process multisheet data
   sheet_batch_cover_data_processed <- sheet_batch_cover_data %>%
@@ -239,7 +246,17 @@ process_batch <- function(batch_name) {
         .names = "{.col}"
       )
     ) %>%
+    # Step 3.5: Fix namepath - replace FINAL.ID with multisheet_first_id_in_group in sheet.path.jpg
+    mutate(
+      SHEET.PATH.JPG = ifelse(
+        !is.na(multisheet_first_id_in_group) & !is_multisheet_first,
+        str_replace(SHEET.PATH.JPG, as.character(FINAL.ID), as.character(multisheet_first_id_in_group)),
+        SHEET.PATH.JPG
+      )
+    ) %>%
     ungroup()
+  
+ 
   
   ############################################################################
   # 4 add missing sheet data to the log
