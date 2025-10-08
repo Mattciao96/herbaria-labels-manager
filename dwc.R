@@ -187,3 +187,16 @@ df <- combined_good %>%
     )
   }))
 write.csv(df, 'results/dwc.csv', na="")
+
+
+# tests
+df_test <- df %>% 
+  group_by(url) %>%
+  summarise(count = n()) %>%
+  ungroup()
+
+options(max.print = 10000)
+options(width = 10000)
+df_test <- df_test %>% 
+  arrange(desc(count))
+print(df_test[9,1]) 
