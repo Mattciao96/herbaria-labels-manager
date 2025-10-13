@@ -165,13 +165,25 @@ process_batch <- function(batch_name) {
   batch_sheet_data <- batch_sheet_data %>% 
     mutate(BATCH.SHEET.BARCODE = SHEET.ORIGINAL.HERBARIUM.ID)
   # change name for duplicates
+  # old
+  # batch_sheet_data <- batch_sheet_data %>%
+  #   group_by(BATCH.SHEET.BARCODE) %>%
+  #   mutate(
+  #     FINAL.ID = if_else(
+  #       row_number() > 1,
+  #       paste0(BATCH.SHEET.BARCODE, "-DUP-", row_number() - 1),
+  #       BATCH.SHEET.BARCODE
+  #     )
+  #   ) %>%
+  #   ungroup()
+  
   batch_sheet_data <- batch_sheet_data %>%
     group_by(BATCH.SHEET.BARCODE) %>%
     mutate(
-      FINAL.ID = if_else(
+      DUPLICATE.ID = if_else(
         row_number() > 1,
-        paste0(BATCH.SHEET.BARCODE, "-DUP-", row_number() - 1),
-        BATCH.SHEET.BARCODE
+        TRUE,
+        FALSE
       )
     ) %>%
     ungroup()
@@ -285,6 +297,22 @@ process_batch <- function(batch_name) {
     )
   ) %>%
     ungroup()
+  
+  # 3.6: add label
+  sheet_batch_cover_data_final  <- sheet_batch_cover_data_final  %>%
+    group_by(group_run_id) %>%
+    mutate(
+      label_reference = ifelse(
+        is_multisheet_first == FALSE & !is.na(multisheet_first_id_in_group),
+        SHEET.PATH.JPG[which(FINAL.ID == multisheet_first_id_in_group)[1]],
+        NA_character_
+      )
+    ) %>%
+    ungroup()
+  
+  # 3.6: add legacy column
+  sheet_batch_cover_data_final  <- sheet_batch_cover_data_final  %>%
+    mutate(first_multisheet_index_in_group = '')
   
   ############################################################################
   # 4 add missing sheet data to the log

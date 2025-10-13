@@ -106,7 +106,7 @@ library(base64enc)
 library(dplyr)
 
 # Thumbor configuration
-THUMBOR_URL <- "https://137.204.119.230/img"
+THUMBOR_URL <- "https://plantdataresources.it/img"
 THUMBOR_KEY <- "Luc_&&vjDV7Jj2j"
 
 # Function to parse image path and build true path (following PHP logic)
