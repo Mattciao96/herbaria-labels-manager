@@ -74,7 +74,7 @@ combine_processed_files <- function() {
     
     # Create output filename with timestamp
     timestamp <- format(Sys.time(), "%Y%m%d_%H%M%S")
-    output_file <- paste0("results/combined_processed_CP_", timestamp, ".csv")
+    output_file <- "results/combined.csv"
     
     # Write combined data to CSV
     write.csv(combined_data, 
@@ -119,3 +119,7 @@ if (exists("combined_result") && !is.null(combined_result)) {
   cat("\nColumn names:\n")
   print(colnames(combined_result))
 }
+
+rdf <- combined_result %>%
+  filter(!startsWith(FINAL.ID, "FI-HCI") & 
+           !startsWith(FINAL.ID, "FIAF"))

@@ -11,6 +11,7 @@ regex_code_id <- 'FI-HCI-[0-9]+'
 regex_cover_id <- 'Folder-FI-HCI-[0-9]+'
 regex_old_id <- 'FI[0-9]+'
 regex_fiaf_id <- 'FIAF-[0-9]+'
+regex_problematic_id <- "(?<=\\[)[^]]+(?=\\])"
 
 batch_colnames <- c(
   'TYPE',
@@ -92,9 +93,10 @@ process_batch <- function(batch_name) {
     mutate(HERBARIUM.ID =
              coalesce(
                str_extract(NOTES, regex_code_id),
-               str_extract(PATH.JPG, regex_code_id),
                str_extract(NOTES, regex_fiaf_id),
-               str_extract(PATH.JPG, regex_fiaf_id)
+               str_extract(NOTES, regex_problematic_id),
+               str_extract(PATH.JPG, regex_fiaf_id),
+               str_extract(PATH.JPG, regex_code_id)
              ))
   
   sheet_data <- sheet_data %>%
@@ -177,8 +179,14 @@ process_batch <- function(batch_name) {
   #   ) %>%
   #   ungroup()
   
+  # new approach new column
   batch_sheet_data <- batch_sheet_data %>%
-    group_by(BATCH.SHEET.BARCODE) %>%
+    group_by(SHEET.HERBARIUM.ID) %>%
+    # group_by(BATCH.SHEET.BARCODE) %>%
+    mutate(
+           #FINAL.ID = BATCH.SHEET.BARCODE
+      FINAL.ID = SHEET.HERBARIUM.ID
+           ) %>% 
     mutate(
       DUPLICATE.ID = if_else(
         row_number() > 1,
@@ -425,3 +433,6 @@ main_processing <- function() {
 
 # Run the main processing
 main_processing()
+
+
+

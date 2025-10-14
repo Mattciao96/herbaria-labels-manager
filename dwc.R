@@ -177,16 +177,30 @@ generate_thumbor_url <- function(image_string) {
 
 # Add url column to your dataframe
 df <- combined_good %>%
-  mutate(url = sapply(associatedMedia, function(x) {
-    tryCatch(
-      generate_thumbor_url(x),
-      error = function(e) {
-        message("Error processing image: ", x, " - ", e$message)
-        return(NA_character_)
-      }
-    )
-  }))
-write.csv(df, 'results/dwc.csv', na="")
+  mutate(url = {
+    n <- length(associatedMedia)
+    pb <- txtProgressBar(min = 0, max = n, style = 3)
+    
+    result <- sapply(seq_along(associatedMedia), function(i) {
+      setTxtProgressBar(pb, i)
+      x <- associatedMedia[[i]]
+      tryCatch(
+        generate_thumbor_url(x),
+        error = function(e) {
+          message("\nError processing image: ", x, " - ", e$message)
+          return(NA_character_)
+        }
+      )
+    })
+    
+    close(pb)
+    cat("\n")  # Add newline after progress bar completes
+    result
+  })
+
+df <- df %>% 
+  filter(catalogNumber != '')
+write.csv(df, 'results/dwc2.csv', na="")
 
 
 # tests
@@ -200,3 +214,12 @@ options(width = 10000)
 df_test <- df_test %>% 
   arrange(desc(count))
 print(df_test[9,1]) 
+
+
+rdf <- df %>%
+  filter(!startsWith(catalogNumber, "FI-HCI") & 
+         !startsWith(catalogNumber, "FIAF"))
+
+
+tre <- combined %>% 
+  filter(multisheet_first_id_in_group != '')
